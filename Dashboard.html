@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dr. Geetanjali Inventory Command Center</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <style>
+    * {
+      box-sizing: border-box;
+      transition: all 0.3s ease;
+    }
+
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, #071b2b, #0d2d44, #12344d);
+      color: #FFFFFF;
+      padding: 24px;
+    }
+
+    .title {
+      text-align: center;
+      font-size: 38px;
+      font-weight: 800;
+      margin-bottom: 28px;
+      letter-spacing: 0.5px;
+      text-shadow: 0 4px 14px rgba(0,0,0,0.45);
+    }
+
+    .filters {
+      display: flex;
+      justify-content: center;
+      gap: 18px;
+      margin-bottom: 30px;
+      flex-wrap: wrap;
+    }
+
+    select {
+      background: rgba(255,255,255,0.96);
+      color: #0A2239;
+      border: none;
+      padding: 14px 18px;
+      border-radius: 14px;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.25);
+    }
+
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 20px;
+      margin-bottom: 35px;
+    }
+
+    .card {
+      background: rgba(255,255,255,0.12);
+      backdrop-filter: blur(18px);
+      border-radius: 24px;
+      padding: 28px;
+      text-align: center;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.45);
+      border: 1px solid rgba(255,255,255,0.12);
+    }
+
+    .card:hover {
+      transform: translateY(-8px) scale(1.03);
+    }
+
+    .kpi-value {
+      font-size: 56px;
+      font-weight: 900;
+      color: #FFFFFF;
+      margin-bottom: 10px;
+    }
+
+    .kpi-label {
+      font-size: 18px;
+      font-weight: 600;
+      color: #D9EAF7;
+    }
+
+    .charts {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 28px;
+    }
+
+    .chart-box {
+      background: rgba(255,255,255,0.08);
+      padding: 24px;
+      border-radius: 22px;
+      box-shadow: 0 8px 28px rgba(0,0,0,0.38);
+      backdrop-filter: blur(12px);
+    }
+
+    canvas {
+      max-height: 340px;
+      filter: brightness(1.2);
+    }
+
+    @media(max-width: 1200px) {
+      .kpi-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+
+      .charts {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media(max-width: 700px) {
+      .kpi-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .title {
+        font-size: 28px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<div class="title">🏥 Dr. Geetanjali Healthcare — Inventory Command Center</div>
+
+<div class="filters">
+  <select id="departmentFilter">
+    <option value="All">All Departments</option>
+    <option value="Biochem">Biochem</option>
+    <option value="Micro">Micro</option>
+    <option value="Hematology">Hematology</option>
+    <option value="Pathology">Pathology</option>
+  </select>
+
+  <select id="urgencyFilter">
+    <option value="All">All Urgency</option>
+    <option value="Low">Low</option>
+    <option value="Medium">Medium</option>
+    <option value="High">High</option>
+    <option value="Critical">Critical</option>
+  </select>
+
+  <select id="categoryFilter">
+    <option value="All">All Categories</option>
+    <option value="Reagent">Reagent</option>
+    <option value="Consumable">Consumable</option>
+    <option value="Equipment">Equipment</option>
+    <option value="Tube">Tube</option>
+  </select>
+</div>
+
+<div class="kpi-grid">
+  <div class="card">
+    <div class="kpi-value" id="pendingCount">0</div>
+    <div class="kpi-label">Pending Requests</div>
+  </div>
+
+  <div class="card">
+    <div class="kpi-value" id="criticalCount">0</div>
+    <div class="kpi-label">Critical Alerts</div>
+  </div>
+
+  <div class="card">
+    <div class="kpi-value" id="duplicateCount">0</div>
+    <div class="kpi-label">Duplicate Prevented</div>
+  </div>
+
+  <div class="card">
+    <div class="kpi-value" id="lowStockCount">0</div>
+    <div class="kpi-label">Low Stock</div>
+  </div>
+</div>
+
+<div class="charts">
+  <div class="chart-box">
+    <canvas id="stockChart"></canvas>
+  </div>
+
+  <div class="chart-box">
+    <canvas id="urgencyChart"></canvas>
+  </div>
+
+  <div class="chart-box">
+    <canvas id="deptChart"></canvas>
+  </div>
+
+  <div class="chart-box">
+    <canvas id="procurementChart"></canvas>
+  </div>
+</div>
+
+<script>
+let rawData = [];
+let stockData = { inStock: 0, lowStock: 0, outStock: 0 };
+
+const commonOptions = {
+  responsive: true,
+  plugins: {
+    legend: {
+      labels: {
+        color: "#FFFFFF",
+        font: {
+          size: 14,
+          weight: "bold"
+        }
+      }
+    }
+  },
+  scales: {
+    x: {
+      ticks: { color: "#FFFFFF" },
+      grid: { color: "rgba(255,255,255,0.08)" }
+    },
+    y: {
+      ticks: { color: "#FFFFFF" },
+      grid: { color: "rgba(255,255,255,0.08)" }
+    }
+  }
+};
+
+const stockChart = new Chart(document.getElementById('stockChart'), {
+  type: 'doughnut',
+  data: {
+    labels: ['In Stock','Low Stock','Out of Stock'],
+    datasets: [{
+      data: [0,0,0]
+    }]
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      title: {
+        display: true,
+        text: 'Stock Health',
+        color: '#FFFFFF',
+        font: { size: 18, weight: 'bold' }
+      },
+      legend: commonOptions.plugins.legend
+    }
+  }
+});
+
+const urgencyChart = new Chart(document.getElementById('urgencyChart'), {
+  type: 'bar',
+  data: {
+    labels: ['Low','Medium','High','Critical'],
+    datasets: [{
+      label: 'Requests',
+      data: [0,0,0,0]
+    }]
+  },
+  options: commonOptions
+});
+
+const deptChart = new Chart(document.getElementById('deptChart'), {
+  type: 'polarArea',
+  data: {
+    labels: ['Biochem','Micro','Hematology','Pathology'],
+    datasets: [{
+      data: [0,0,0,0]
+    }]
+  },
+  options: {
+    plugins: {
+      legend: commonOptions.plugins.legend
+    }
+  }
+});
+
+const procurementChart = new Chart(document.getElementById('procurementChart'), {
+  type: 'line',
+  data: {
+    labels: ['Requested','Approved','Ordered','Transit','Delivered'],
+    datasets: [{
+      label: 'Procurement Funnel',
+      data: [0,0,0,0,0]
+    }]
+  },
+  options: commonOptions
+});
+
+google.script.run.withSuccessHandler(function(response) {
+  rawData = response.requests;
+  stockData = response.stock;
+  updateDashboard(rawData);
+  updateStockChart();
+}).getDashboardData();
+
+document.getElementById("departmentFilter").addEventListener("change", applyFilters);
+document.getElementById("urgencyFilter").addEventListener("change", applyFilters);
+document.getElementById("categoryFilter").addEventListener("change", applyFilters);
+
+function applyFilters() {
+  const dept = document.getElementById("departmentFilter").value;
+  const urgency = document.getElementById("urgencyFilter").value;
+  const category = document.getElementById("categoryFilter").value;
+
+  const filtered = rawData.filter(item =>
+    (dept === "All" || item.department === dept) &&
+    (urgency === "All" || item.urgency === urgency) &&
+    (category === "All" || item.category === category)
+  );
+
+  updateDashboard(filtered);
+}
+
+function updateStockChart() {
+  stockChart.data.datasets[0].data = [
+    stockData.inStock,
+    stockData.lowStock,
+    stockData.outStock
+  ];
+  stockChart.update();
+}
+
+function updateDashboard(data) {
+  const pending = data.filter(x => x.adminStatus && x.adminStatus.includes("Pending")).length;
+  const critical = data.filter(x => x.urgency === "Critical").length;
+  const duplicates = 0;
+  const lowStock = stockData.lowStock + stockData.outStock;
+
+  document.getElementById("pendingCount").innerText = pending;
+  document.getElementById("criticalCount").innerText = critical;
+  document.getElementById("duplicateCount").innerText = duplicates;
+  document.getElementById("lowStockCount").innerText = lowStock;
+
+  urgencyChart.data.datasets[0].data = [
+    data.filter(x => x.urgency === "Low").length,
+    data.filter(x => x.urgency === "Medium").length,
+    data.filter(x => x.urgency === "High").length,
+    data.filter(x => x.urgency === "Critical").length
+  ];
+
+  deptChart.data.datasets[0].data = [
+    data.filter(x => x.department === "Biochem").length,
+    data.filter(x => x.department === "Micro").length,
+    data.filter(x => x.department === "Hematology").length,
+    data.filter(x => x.department === "Pathology").length
+  ];
+
+  procurementChart.data.datasets[0].data = [
+    data.length,
+    data.filter(x => x.adminStatus === "Approved").length,
+    data.filter(x => x.adminStatus === "Ordered").length,
+    data.filter(x => x.adminStatus === "In Transit").length,
+    data.filter(x => x.adminStatus === "Delivered").length
+  ];
+
+  urgencyChart.update();
+  deptChart.update();
+  procurementChart.update();
+}
+
+setInterval(() => {
+  google.script.run.withSuccessHandler(function(response) {
+    rawData = response.requests;
+    stockData = response.stock;
+    applyFilters();
+    updateStockChart();
+  }).getDashboardData();
+}, 60000);
+</script>
+
+</body>
+</html>
